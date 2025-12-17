@@ -5,41 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Austrian Appointment Monitor</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f4f4f4; }
-        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        label { font-weight: bold; display: block; margin-top: 10px; }
-        input, button, textarea { width: 100%; margin-top: 5px; margin-bottom: 10px; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        button { cursor: pointer; font-weight: bold; font-size: 16px; }
-        #startBtn { background-color: #28a745; color: white; border: none; }
-        #stopBtn { background-color: #dc3545; color: white; border: none; display: none; }
-        #log { margin-top: 20px; padding: 10px; background: #1e1e1e; color: #00ff00; height: 200px; overflow-y: scroll; font-family: monospace; font-size: 11px; border-radius: 4px; }
-        .status-alert { color: #ff4d4d; font-weight: bold; }
+        body { font-family: 'Segoe UI', sans-serif; padding: 20px; background-color: #f0f2f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { color: #d32f2f; text-align: center; margin-bottom: 20px; }
+        label { font-weight: 600; display: block; margin-top: 15px; color: #333; }
+        input, button, textarea { width: 100%; margin-top: 5px; padding: 12px; box-sizing: border-box; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        textarea { font-family: monospace; background: #fafafa; }
+        button { cursor: pointer; font-weight: bold; font-size: 16px; margin-top: 20px; border: none; transition: 0.2s; }
+        #startBtn { background-color: #2e7d32; color: white; }
+        #startBtn:hover { background-color: #1b5e20; }
+        #stopBtn { background-color: #c62828; color: white; display: none; }
+        #log { margin-top: 20px; padding: 15px; background: #263238; color: #69f0ae; height: 250px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; border-radius: 6px; border: 1px solid #000; }
+        .alert-row { color: #ff5252; font-weight: bold; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>🇦🇹 Appointment Monitor</h2>
-    
+    <p style="font-size: 12px; color: #666; text-align: center;">Note: Enable "Allow CORS" extension for this to work.</p>
+
     <label>Target URL:</label>
     <input type="text" id="targetUrl" value="https://appointment.bmeia.gv.at/?fromSpecificInfo=True">
 
     <label>Form Data (JSON):</label>
-    <textarea id="formData" rows="7">{
-        "Language": "en", 
-        "Office": "TEHERAN",
-        "CalendarId": "48907107",
-        "PersonCount": "2",
-        "Command": "Next"
-        }</textarea>
+    <textarea id="formData" rows="6">{
+"Language": "en", 
+"Office": "TEHERAN",
+"CalendarId": "48907107",
+"PersonCount": "2",
+"Command": "Next"
+}</textarea>
 
-    <label>Trigger Alarm if this text is MISSING:</label>
+    <label>Trigger Alarm if this text is GONE:</label>
     <input type="text" id="expectedString" value="For your selection there are unfortunately no appointments available">
 
-    <button id="startBtn" onclick="startMonitoring()">Start Monitoring 🚀</button>
-    <button id="stopBtn" onclick="stopMonitoring()">Stop 🛑</button>
+    <button id="startBtn" onclick="startMonitoring()">START MONITORING 🚀</button>
+    <button id="stopBtn" onclick="stopMonitoring()">STOP MONITORING 🛑</button>
 
-    <div id="log">System ready...</div>
+    <div id="log">Waiting for user to start...</div>
 
     <audio id="alarmSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto" loop></audio>
 </div>
@@ -48,38 +53,34 @@
     let intervalId = null;
     let isRunning = false;
 
-    async function sendRequest() {
-        const targetUrl = document.getElementById('targetUrl').value;
-        const expectedString = document.getElementById('expectedString').value;
-        const rawData = document.getElementById('formData').value;
-        const logDiv = document.getElementById('log');
+    async function checkSite() {
+        const url = document.getElementById('targetUrl').value;
+        const expected = document.getElementById('expectedString').value;
+        const rawBody = document.getElementById('formData').value;
+        const log = document.getElementById('log');
         const alarm = document.getElementById('alarmSound');
-        const timestamp = new Date().toLocaleTimeString();
-
-        // We use a CORS Proxy to bypass browser restrictions
-        const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(targetUrl);
+        const now = new Date().toLocaleTimeString();
 
         try {
-            const response = await fetch(proxyUrl, {
+            // Using direct fetch (Requires CORS extension)
+            const response = await fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(JSON.parse(rawData))
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                // Converting JSON to URL Search Params for standard form behavior
+                body: new URLSearchParams(JSON.parse(rawBody))
             });
 
-            const text = await response.text();
-            
-            // Logic: IF text is NOT found, play alarm
-            if (!text.includes(expectedString)) {
-                logDiv.innerHTML = `<div class="status-alert">[${timestamp}] 🚨 ALERT: Slot might be open! Text not found.</div>` + logDiv.innerHTML;
+            const htmlContent = await response.text();
+
+            if (!htmlContent.includes(expected)) {
+                log.innerHTML = `<div class="alert-row">[${now}] 🚨 ALERT! TEXT MISSING - POSSIBLE SLOT!</div>` + log.innerHTML;
                 if (alarm.paused) alarm.play();
             } else {
-                logDiv.innerHTML = `<div>[${timestamp}] Checked: No slots yet.</div>` + logDiv.innerHTML;
+                log.innerHTML = `<div>[${now}] No slots found. (Status: 200 OK)</div>` + log.innerHTML;
             }
 
-        } catch (error) {
-            logDiv.innerHTML = `<div style="color: orange;">[${timestamp}] ⚠️ Error: ${error.message}</div>` + logDiv.innerHTML;
+        } catch (err) {
+            log.innerHTML = `<div style="color:#ffb74d">[${now}] ⚠️ Request Error: ${err.message}. (Ensure "Allow CORS" extension is ON)</div>` + log.innerHTML;
         }
     }
 
@@ -87,15 +88,15 @@
         isRunning = true;
         document.getElementById('alarmSound').load();
         document.getElementById('startBtn').style.display = 'none';
-        document.getElementById('stopBtn').style.display = 'inline-block';
-        sendRequest();
-        intervalId = setInterval(sendRequest, 3000); // Increased to 3 seconds to avoid proxy limits
+        document.getElementById('stopBtn').style.display = 'block';
+        checkSite();
+        intervalId = setInterval(checkSite, 2000); // 2 seconds
     }
 
     function stopMonitoring() {
         isRunning = false;
         clearInterval(intervalId);
-        document.getElementById('startBtn').style.display = 'inline-block';
+        document.getElementById('startBtn').style.display = 'block';
         document.getElementById('stopBtn').style.display = 'none';
         const alarm = document.getElementById('alarmSound');
         alarm.pause();
